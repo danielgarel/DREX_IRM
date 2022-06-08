@@ -49,6 +49,9 @@ def train_reward(args):
     ac_dims = None
     datasets = []
     env_kwargs = [{'xml_file': 'hopper_foot_mu1.xml'}, {'xml_file': 'hopper_foot_mu3.xml'}]
+    loss = []
+    acc = []
+    irm_loss = []
 
     for spec, costs in zip(env_kwargs, [[0.01, 0.008], [0.1, 0.17]]):
         for cost in costs:
@@ -85,7 +88,8 @@ def train_reward(args):
     for dataset in datasets:
         D = dataset.sample(args.D, include_action=args.include_action)
 
-        model.train(D, iter=args.iter, l2_reg=args.l2_reg, noise_level=args.noise, debug=True)
+        model.train(D, iter=args.iter, l2_reg=args.l2_reg, irm_coeff=args.irm_coeff, noise_level=args.noise, debug=True)
+        if args.irm_coeff>0:
 
         model.saver.save(sess, os.path.join(str(log_dir), 'model.ckpt'), write_meta_graph=False)
 
@@ -288,7 +292,7 @@ def train_rl(args):
         procs.append(p)
 
     for line in procs[0].stdout:
-        print('here: ', line.decode(), end='')
+        print(line.decode(), end='')
 
     for p in procs[1:]:
         p.wait()
@@ -360,6 +364,7 @@ if __name__ == "__main__":
     parser.add_argument('--embedding_dims', default=256, type=int, help='embedding dims')
     parser.add_argument('--num_models', default=3, type=int, help='number of models to ensemble')
     parser.add_argument('--l2_reg', default=0.01, type=float, help='l2 regularization size')
+    parser.add_argument('--irm_coeff', default=0, type=float, help='irm coefficient size')
     parser.add_argument('--noise', default=0.0, type=float,
                         help='noise level to add on training label (another regularization)')
     parser.add_argument('--iter', default=3000, type=int, help='# trainig iters')
