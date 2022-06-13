@@ -2,6 +2,7 @@ import sys
 import os
 import numpy as np
 import tensorflow as tf
+import wandb
 from tqdm import tqdm
 
 import gym
@@ -153,6 +154,10 @@ class RewardNet():
 
 class Model(object):
     def __init__(self,net:RewardNet,batch_size=64):
+        '''
+        Need to defing a self.logging
+        '''
+
         self.B = batch_size
         self.net = net
 
@@ -189,6 +194,9 @@ class Model(object):
         self.loss = tf.reduce_mean(loss,axis=0) + self.l2_loss + self.irm_loss
         if self.irm_coeff > 1.0:
             self.loss /= self.irm_coeff
+
+        ##DG##
+        # self.summary_scalar # add the loss and then add to file and execute as part of execution in training
 
         pred = tf.cast(tf.greater(self.v_y,self.v_x),tf.int32)
         self.acc = tf.reduce_mean(tf.cast(tf.equal(pred,self.l),tf.float32))
@@ -291,6 +299,9 @@ class Model(object):
                 self.irm_coeff:irm_coeff
             })
 
+            wandb.log({'loss': loss, 'l2_loss': l2_loss,
+                       'acc': acc, 'irm_loss': irm_loss})
+
             if debug:
                 if it % 100 == 0 or it < 10:
                     b_x,b_y,x_split,y_split,b_l = _batch(valid_idxes,add_noise=False)
@@ -307,10 +318,10 @@ class Model(object):
                 print('loss: %f (l2_loss: %f, irm_loss: %f), acc: %f, valid_acc: %f'%(loss,l2_loss,irm_loss,acc,valid_acc))
                 print('early termination@%08d'%it)
                 break
-            ### DG added - before no return ###
-            if irm_coeff>0:
-                return loss, acc, irm_loss
-            ###################################
+            # ### DG added - before no return ###
+            # if irm_coeff>0:
+            #     return loss, acc, irm_loss/irm_coeff
+            # ###################################
 
     def get_reward(self,obs,acs,batch_size=1024):
         sess = tf.get_default_session()

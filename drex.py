@@ -9,12 +9,21 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm as std_tqdm
 
+### DG - WANDB for logging ###
+import wandb
+wandb.init(project="DREX-IRM", entity="dgarellick", name = 'ERM')
+##############################
+
 tqdm = partial(std_tqdm, dynamic_ncols=True, disable=eval(os.environ.get("DISABLE_TQDM", 'False')))
 
 import gym
 
 from bc_noise_dataset import BCNoisePreferenceDataset
 from utils import RewardNet, Model
+
+'''
+Need to add the tensorboard logging for all the losses.
+'''
 
 
 def format_name_string(name_string):
@@ -49,9 +58,10 @@ def train_reward(args):
     ac_dims = None
     datasets = []
     env_kwargs = [{'xml_file': 'hopper_foot_mu1.xml'}, {'xml_file': 'hopper_foot_mu3.xml'}]
-    loss = []
-    acc = []
-    irm_loss = []
+    if args.irm_coeff>0:
+        losses = []
+        accuracies = []
+        irm_penalties = []
 
     for spec, costs in zip(env_kwargs, [[0.01, 0.008], [0.1, 0.17]]):
         for cost in costs:
@@ -81,17 +91,35 @@ def train_reward(args):
     # Training configuration
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
+
     sess = tf.InteractiveSession()
+
+    # writer = tf.summary.FileWriter('./graphs', sess.graph) ADD THIS TO SESSION
 
     sess.run(init_op)
 
     for dataset in datasets:
         D = dataset.sample(args.D, include_action=args.include_action)
 
+        # if args.irm_coeff>0:
+        #     loss, acc, irm_penalty = model.train(D, iter=args.iter, l2_reg=args.l2_reg, irm_coeff=args.irm_coeff, noise_level=args.noise, debug=True)
+        #     losses.append(loss)
+        #     accuracies.append(acc)
+        #     irm_penalties.append(irm_penalty)
+
+        # else:
         model.train(D, iter=args.iter, l2_reg=args.l2_reg, irm_coeff=args.irm_coeff, noise_level=args.noise, debug=True)
-        if args.irm_coeff>0:
 
         model.saver.save(sess, os.path.join(str(log_dir), 'model.ckpt'), write_meta_graph=False)
+    #
+    # if args.irm_coeff>0:
+    #     train_loss = tf.stack(losses).mean()
+    #     train_acc = tf.stack(accuracies).mean()
+    #     train_penalty = tf.stack(irm_penalties).mean()
+    #     total_loss = train_loss + args.irm_coeff * train_penalty
+    #     if args.irm_coeff>1.0:
+    #         total_loss /= args.irm_coeff
+
 
     sess.close()
 
