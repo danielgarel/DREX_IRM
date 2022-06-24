@@ -5,6 +5,8 @@ import tensorflow as tf
 import pickle
 from tqdm import tqdm as std_tqdm
 from functools import partial
+# from stable_baselines3 import PPO as PPOSB
+
 tqdm = partial(std_tqdm, dynamic_ncols=True, disable=eval(os.environ.get("DISABLE_TQDM", 'False')))
 
 import gym
@@ -23,6 +25,15 @@ from matplotlib import pyplot as plt
 
 from bc_mujoco import Policy
 from utils import RandomAgent, gen_traj
+################################
+
+def format_name_string(name_string):
+    name_string = name_string.replace('{', '_').replace('}', '').replace(' ', '').replace("'xml_file'", '')
+    name_string = name_string.replace("'", "").replace(":", "").replace('/', '')
+    name_string = name_string.replace(".xml", "")
+
+    return name_string
+
 ################################
 
 class ActionNoise(object):
@@ -215,7 +226,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', default=0, type=int, help='seed for the experiments')
     parser.add_argument('--log_dir', required=True, help='log dir')
     parser.add_argument('--env_id', required=True, help='Select the environment to run')
-    parser.add_argument('--bc_agent',required=True)
+#     parser.add_argument('--bc_agent',required=True, 'We will instead use PPO policy used to generate suboptimal demo')
     parser.add_argument('--demo_trajs',required=False, help='suboptimal demo trajectories used for bc (used to generate a figure)')
     parser.add_argument('--demo_trajs_dir',required=False, help='suboptimal demo trajectories directories - load all files')
     parser.add_argument('--ctrl_cost', required=False, help='Select the environment to run', default=0.001, type=float)
@@ -237,13 +248,19 @@ if __name__ == "__main__":
     env = gym.make(args.env_id, ctrl_cost_weight=args.ctrl_cost, **spec)
     env.seed(args.seed)
 
-    dataset = BCNoisePreferenceDataset(env)
-    agent = Policy(env)
-    agent.load(args.bc_agent)
-
-    dataset.prebuild(agent,eval(args.noise_range),args.num_trajs,args.min_length,args.log_dir)
-
     with open(args.demo_trajs,'rb') as f:
         demo_trajs = pickle.load(f)
+    
+    dataset = BCNoisePreferenceDataset(env)
+#     agent = Policy(env)
+#     agent.load(args.demo_trajs)
+    
+    model_dir = './sb_models/ckpt_' + args.env_id + format_name_string(str(spec)) + '_' + str(args.ctrl_cost)
+    model_file = 'ppo_model_860000_steps'
+    # model = PPOSB.load(os.path.join(model_dir, model_file))
+    
+    dataset.prebuild(model, eval(args.noise_range),args.num_trajs,args.min_length,args.log_dir)
+
+    
 
     dataset.draw_fig(args.log_dir,demo_trajs)

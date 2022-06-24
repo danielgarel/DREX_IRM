@@ -169,7 +169,7 @@ class Model(object):
 
         self.l2_reg = tf.placeholder(tf.float32,[]) # [0 when x is better 1 when y is better]
         ### DG ###
-        self.irm_coeff = tf.placeholder(tf.float32,[]) # [0 when x is better 1 when y is better]
+        self.irm_coeff = tf.placeholder(tf.float32,[])
 
         # Graph Ops for Inference
         self.fv, self.r = net.build_reward(self.x)
@@ -188,12 +188,13 @@ class Model(object):
         weight_decay = net.build_weight_decay()
         self.l2_loss = self.l2_reg * weight_decay
         ### DG ###
-        grad_penalty = irm_penalty(logits, self.l)
+        labels = tf.stack([tf.cast(self.l, tf.float32),tf.cast(1-self.l, tf.float32)], axis=1)
+        grad_penalty = self.irm_penalty(logits, labels)
         self.irm_loss = self.irm_coeff * grad_penalty
 
         self.loss = tf.reduce_mean(loss,axis=0) + self.l2_loss + self.irm_loss
-        if self.irm_coeff > 1.0:
-            self.loss /= self.irm_coeff
+        self.loss = tf.cond(tf.greater(self.irm_coeff, 1), true_fn=lambda: tf.math.divide(self.loss, self.irm_coeff), false_fn=lambda: tf.math.divide(self.loss, 1))
+
 
         ##DG##
         # self.summary_scalar # add the loss and then add to file and execute as part of execution in training
@@ -202,7 +203,7 @@ class Model(object):
         self.acc = tf.reduce_mean(tf.cast(tf.equal(pred,self.l),tf.float32))
 
         self.optim = tf.train.AdamOptimizer(1e-4)
-        self.update_op = self.optim.minimize(self.loss,var_list=self.parameters(train=True))
+        self.update_op = self.optim.minimize(self.loss, var_list=self.parameters(train=True))
 
         self.saver = tf.train.Saver(var_list=self.parameters(train=False),max_to_keep=0)
 
@@ -300,7 +301,7 @@ class Model(object):
             })
 
             wandb.log({'loss': loss, 'l2_loss': l2_loss,
-                       'acc': acc, 'irm_loss': irm_loss})
+                       'acc': acc, f"'irm_loss_'{irm_coeff}": irm_loss})
 
             if debug:
                 if it % 100 == 0 or it < 10:
@@ -312,7 +313,7 @@ class Model(object):
                         self.y_split:y_split,
                         self.l:b_l
                     })
-                    tqdm.write(('loss: %f (l2_loss: %f, irm_loss: %), acc: %f, valid_acc: %f'%(loss,l2_loss,irm_loss,acc,valid_acc)))
+                    tqdm.write(('loss: %f (l2_loss: %f, irm_loss: %f), acc: %f, valid_acc: %f'%(loss,l2_loss,irm_loss,acc,valid_acc)))
 
             if early_term and valid_acc >= 0.95:
                 print('loss: %f (l2_loss: %f, irm_loss: %f), acc: %f, valid_acc: %f'%(loss,l2_loss,irm_loss,acc,valid_acc))

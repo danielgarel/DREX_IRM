@@ -11,7 +11,7 @@ from tqdm import tqdm as std_tqdm
 
 ### DG - WANDB for logging ###
 import wandb
-wandb.init(project="DREX-IRM", entity="dgarellick", name = 'ERM')
+wandb.init(project="DREX-IRM", entity="dgarellick", name = 'train_RL_IRM',settings=wandb.Settings(start_method='fork'))
 ##############################
 
 tqdm = partial(std_tqdm, dynamic_ncols=True, disable=eval(os.environ.get("DISABLE_TQDM", 'False')))
@@ -45,8 +45,10 @@ def train_reward(args):
     # set random seed
     np.random.seed(args.seed)
     tf.random.set_random_seed(args.seed)
-
-    log_dir = Path(args.log_dir) / 'trex'
+    if args.irm_coeff>0:
+        log_dir = Path(args.log_dir) / f"trex_irm_{args.irm_coeff}"
+    else:
+        log_dir = Path(args.log_dir) / 'trex'
     log_dir.mkdir(parents=True, exist_ok='temp' in args.log_dir)
 
     with open(str(log_dir / 'args.txt'), 'w') as f:
@@ -58,10 +60,10 @@ def train_reward(args):
     ac_dims = None
     datasets = []
     env_kwargs = [{'xml_file': 'hopper_foot_mu1.xml'}, {'xml_file': 'hopper_foot_mu3.xml'}]
-    if args.irm_coeff>0:
-        losses = []
-        accuracies = []
-        irm_penalties = []
+    # if args.irm_coeff>0:
+    #     losses = []
+    #     accuracies = []
+    #     irm_penalties = []
 
     for spec, costs in zip(env_kwargs, [[0.01, 0.008], [0.1, 0.17]]):
         for cost in costs:
@@ -187,7 +189,10 @@ def eval_reward(args):
     sess = tf.Session(graph=graph, config=config)
 
     with sess.as_default():
-        model.saver.restore(sess, os.path.join(args.log_dir, 'trex', 'model.ckpt'))
+        if args.irm_coeff>0:
+            model.saver.restore(sess, os.path.join(args.log_dir, f"trex_irm_{args.irm_coeff}", 'model.ckpt'))
+        else:
+            model.saver.restore(sess, os.path.join(args.log_dir, 'trex', 'model.ckpt'))
 
     # Calculate Predicted Returns
     def _get_return(obs, acs):
@@ -279,10 +284,17 @@ def train_rl(args):
     N.nvmlInit()
     ngpu = N.nvmlDeviceGetCount()
 
-    log_dir = Path(args.log_dir) / 'rl'
+    if args.irm_coeff>0:
+        log_dir = Path(args.log_dir) / f'rl_{args.irm_coeff}'
+    else:
+        log_dir = Path(args.log_dir) / 'rl'
+
     log_dir.mkdir(parents=True, exist_ok='temp' in args.log_dir)
 
-    model_dir = os.path.join(args.log_dir, 'trex')
+    if args.irm_coeff>0:
+        model_dir = os.path.join(args.log_dir, f"trex_irm_{args.irm_coeff}")
+    else:
+        model_dir = os.path.join(args.log_dir, 'trex')
 
     kwargs = {
         "model_dir": os.path.abspath(model_dir),
@@ -359,10 +371,12 @@ def eval_rl(args):
                 agent_perfs = _get_perf(agent)
                 print('[%s-%d] %f %f' % (step, i, np.mean(agent_perfs), np.std(agent_perfs)))
                 print('[%s-%d] %f %f' % (step, i, np.mean(agent_perfs), np.std(agent_perfs)), file=f)
+                wandb.log({'agent_perf': agent_perfs})
 
                 perfs += agent_perfs
             print('[%s] %f %f %f %f' % (step, np.mean(perfs), np.std(perfs), np.max(perfs), np.min(perfs)))
             print('[%s] %f %f %f %f' % (step, np.mean(perfs), np.std(perfs), np.max(perfs), np.min(perfs)), file=f)
+            wandb.log({'perf': perfs})
 
             f.flush()
 
