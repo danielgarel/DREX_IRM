@@ -207,74 +207,79 @@ def eval_reward(args):
         pred_returns.append(_get_return(obs, actions))
     sess.close()
 
-    # # Draw Result
-    # def _draw(gt_returns, pred_returns, seen, figname=False):
-    #     """
-    #     gt_returns: [N] length
-    #     pred_returns: [N] length
-    #     seen: [N] length
-    #     """
-    #     import matplotlib
-    #     matplotlib.use('agg')
-    #     import matplotlib.pylab
-    #     from matplotlib import pyplot as plt
-    #     from imgcat import imgcat
-    #
-    #     matplotlib.rcParams.update(matplotlib.rcParamsDefault)
-    #     plt.style.use('ggplot')
-    #     params = {
-    #         'text.color': 'black',
-    #         'axes.labelcolor': 'black',
-    #         'xtick.color': 'black',
-    #         'ytick.color': 'black',
-    #         'legend.fontsize': 'xx-large',
-    #         # 'figure.figsize': (6, 5),
-    #         'axes.labelsize': 'xx-large',
-    #         'axes.titlesize': 'xx-large',
-    #         'xtick.labelsize': 'xx-large',
-    #         'ytick.labelsize': 'xx-large'}
-    #     matplotlib.pylab.rcParams.update(params)
-    #
-    #     def _convert_range(x, minimum, maximum, a, b):
-    #         return (x - minimum) / (maximum - minimum) * (b - a) + a
-    #
-    #     def _no_convert_range(x, minimum, maximum, a, b):
-    #         return x
-    #
-    #     convert_range = _convert_range
-    #     # convert_range = _no_convert_range
-    #
-    #     gt_max, gt_min = max(gt_returns), min(gt_returns)
-    #     pred_max, pred_min = max([sum(rewards) for rewards in pred_returns]), min([sum(rewards) for rewards in pred_returns])
-    #     max_observed = np.max(gt_returns[np.where(seen != 1)])
-    #
-    #     # Draw P
-    #     fig, ax = plt.subplots()
-    #
-    #     ax.plot(gt_returns[np.where(seen == 0)],
-    #             [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 0)]],
-    #             'go')  # unseen trajs
-    #     ax.plot(gt_returns[np.where(seen == 1)],
-    #             [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 1)]],
-    #             'bo')  # seen trajs for T-REX
-    #     ax.plot(gt_returns[np.where(seen == 2)],
-    #             [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 2)]],
-    #             'ro')  # seen trajs for BC
-    #
-    #     ax.plot([gt_min - 5, gt_max + 5], [gt_min - 5, gt_max + 5], 'k--')
-    #     # ax.plot([gt_min-5,max_observed],[gt_min-5,max_observed],'k-', linewidth=2)
-    #     # ax.set_xlim([gt_min-5,gt_max+5])
-    #     # ax.set_ylim([gt_min-5,gt_max+5])
-    #     ax.set_xlabel("Ground Truth Returns")
-    #     ax.set_ylabel("Predicted Returns (normalized)")
-    #     fig.tight_layout()
-    #
-    #     plt.savefig(figname)
-    #     plt.close()
-    #
-    # save_path = os.path.join(args.log_dir, 'gt_vs_pred_rewards.pdf')
-    # _draw(np.array(gt_returns), np.array(pred_returns), np.array(seen), save_path)
+    # Draw Result
+    def _draw(gt_returns, pred_returns, seen, figname=False):
+        """
+        gt_returns: [N] length
+        pred_returns: [N] length
+        seen: [N] length
+        """
+        import matplotlib
+        matplotlib.use('agg')
+        import matplotlib.pylab
+        from matplotlib import pyplot as plt
+        from imgcat import imgcat
 
+        matplotlib.rcParams.update(matplotlib.rcParamsDefault)
+        plt.style.use('ggplot')
+        params = {
+            'text.color': 'black',
+            'axes.labelcolor': 'black',
+            'xtick.color': 'black',
+            'ytick.color': 'black',
+            'legend.fontsize': 'xx-large',
+            # 'figure.figsize': (6, 5),
+            'axes.labelsize': 'xx-large',
+            'axes.titlesize': 'xx-large',
+            'xtick.labelsize': 'xx-large',
+            'ytick.labelsize': 'xx-large'}
+        matplotlib.pylab.rcParams.update(params)
+
+        def _convert_range(x, minimum, maximum, a, b):
+            return (x - minimum) / (maximum - minimum) * (b - a) + a
+
+        def _no_convert_range(x, minimum, maximum, a, b):
+            return x
+
+        convert_range = _convert_range
+        # convert_range = _no_convert_range
+
+        gt_max, gt_min = max(gt_returns), min(gt_returns)
+        pred_max, pred_min = max([sum(rewards) for rewards in pred_returns]), min([sum(rewards) for rewards in pred_returns])
+        max_observed = np.max(gt_returns[np.where(seen != 1)])
+
+        # Draw P
+        fig, ax = plt.subplots()
+
+        # ax.plot(gt_returns[np.where(seen == 0)],
+        #         [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 0)]],
+        #         'go')  # unseen trajs
+
+        y_seen = [convert_range(sum(p), pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 1)]]
+        y_BC = [convert_range(sum(p), pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 2)]]
+
+        print('here', (y_BC))
+        print('get', (gt_returns[np.where(seen == 2)]))
+
+
+        ax.plot(gt_returns[np.where(seen == 1)],
+                list(y_seen), 'bo') # [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 1)]],'bo')  # seen trajs for T-REX
+        ax.plot(gt_returns[np.where(seen == 2)],
+                list(y_BC), 'ro')# [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 2)]],'ro')  # seen trajs for BC
+
+        ax.plot([gt_min - 5, gt_max + 5], [gt_min - 5, gt_max + 5], 'k--')
+        # ax.plot([gt_min-5,max_observed],[gt_min-5,max_observed],'k-', linewidth=2)
+        # ax.set_xlim([gt_min-5,gt_max+5])
+        # ax.set_ylim([gt_min-5,gt_max+5])
+        ax.set_xlabel("Ground Truth Returns")
+        ax.set_ylabel("Predicted Returns (normalized)")
+        fig.tight_layout()
+
+        plt.savefig(figname)
+        plt.close()
+
+    save_path = os.path.join(args.log_dir, 'gt_vs_pred_rewards.pdf')
+    _draw(np.array(gt_returns), np.array(pred_returns), np.array(seen), save_path)
 
 def train_rl(args):
     # Train an agent
