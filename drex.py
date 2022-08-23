@@ -8,10 +8,12 @@ from pathlib import Path
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm as std_tqdm
+import json
 
 ### DG - WANDB for logging ###
 import wandb
-wandb.init(project="DREX-IRM", entity="dgarellick", name = 'train_RL_IRM',settings=wandb.Settings(start_method='fork'))
+
+# wandb.init(project="DREX-IRM_vis_final", entity="dgarellick", name = f'Hopper_{args.spec}_{args.irm_coeff}',settings=wandb.Settings(start_method='fork'))
 ##############################
 
 tqdm = partial(std_tqdm, dynamic_ncols=True, disable=eval(os.environ.get("DISABLE_TQDM", 'False')))
@@ -45,7 +47,7 @@ def train_reward(args):
     # set random seed
     np.random.seed(args.seed)
     tf.random.set_random_seed(args.seed)
-    if args.irm_coeff>0:
+    if args.irm_coeff > 0:
         log_dir = Path(args.log_dir) / f"trex_irm_{args.irm_coeff}"
     else:
         log_dir = Path(args.log_dir) / 'trex'
@@ -122,7 +124,6 @@ def train_reward(args):
     #     if args.irm_coeff>1.0:
     #         total_loss /= args.irm_coeff
 
-
     sess.close()
 
 
@@ -189,7 +190,7 @@ def eval_reward(args):
     sess = tf.Session(graph=graph, config=config)
 
     with sess.as_default():
-        if args.irm_coeff>0:
+        if args.irm_coeff > 0:
             model.saver.restore(sess, os.path.join(args.log_dir, f"trex_irm_{args.irm_coeff}", 'model.ckpt'))
         else:
             model.saver.restore(sess, os.path.join(args.log_dir, 'trex', 'model.ckpt'))
@@ -245,7 +246,8 @@ def eval_reward(args):
         # convert_range = _no_convert_range
 
         gt_max, gt_min = max(gt_returns), min(gt_returns)
-        pred_max, pred_min = max([sum(rewards) for rewards in pred_returns]), min([sum(rewards) for rewards in pred_returns])
+        pred_max, pred_min = max([sum(rewards) for rewards in pred_returns]), min(
+            [sum(rewards) for rewards in pred_returns])
         max_observed = np.max(gt_returns[np.where(seen != 1)])
 
         # Draw P
@@ -258,14 +260,12 @@ def eval_reward(args):
         y_seen = [convert_range(sum(p), pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 1)]]
         y_BC = [convert_range(sum(p), pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 2)]]
 
-        print('here', (y_BC))
-        print('get', (gt_returns[np.where(seen == 2)]))
-
-
         ax.plot(gt_returns[np.where(seen == 1)],
-                list(y_seen), 'bo') # [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 1)]],'bo')  # seen trajs for T-REX
+                list(y_seen),
+                'bo')  # [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 1)]],'bo')  # seen trajs for T-REX
         ax.plot(gt_returns[np.where(seen == 2)],
-                list(y_BC), 'ro')# [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 2)]],'ro')  # seen trajs for BC
+                list(y_BC),
+                'ro')  # [convert_range(p, pred_min, pred_max, gt_min, gt_max) for p in pred_returns[np.where(seen == 2)]],'ro')  # seen trajs for BC
 
         ax.plot([gt_min - 5, gt_max + 5], [gt_min - 5, gt_max + 5], 'k--')
         # ax.plot([gt_min-5,max_observed],[gt_min-5,max_observed],'k-', linewidth=2)
@@ -278,8 +278,9 @@ def eval_reward(args):
         plt.savefig(figname)
         plt.close()
 
-    save_path = os.path.join(args.log_dir, 'gt_vs_pred_rewards.pdf')
+    save_path = os.path.join(args.log_dir, f'gt_vs_pred_rewards_{args.irm_coeff}.pdf')
     _draw(np.array(gt_returns), np.array(pred_returns), np.array(seen), save_path)
+
 
 def train_rl(args):
     # Train an agent
@@ -289,17 +290,19 @@ def train_rl(args):
     N.nvmlInit()
     ngpu = N.nvmlDeviceGetCount()
 
-    if args.irm_coeff>0:
-        log_dir = Path(args.log_dir) / f'rl_{args.irm_coeff}'
+    name_temp = str(args.env_kwargs)
+    print('name_temp: ', name_temp)
+    if args.irm_coeff > 0:
+        log_dir = Path(args.log_dir) / f'rl_{args.irm_coeff}_{name_temp}_seed_{args.seed}'
     else:
-        log_dir = Path(args.log_dir) / 'rl'
+        log_dir = Path(args.log_dir) / f'rl_{name_temp}_seed_{args.seed}'
 
     log_dir.mkdir(parents=True, exist_ok='temp' in args.log_dir)
 
-    if args.irm_coeff>0:
+    if args.irm_coeff > 0:
         model_dir = os.path.join(args.log_dir, f"trex_irm_{args.irm_coeff}")
     else:
-        model_dir = os.path.join(args.log_dir, 'trex')
+        model_dir = os.path.join(args.log_dir, f'trex')
 
     kwargs = {
         "model_dir": os.path.abspath(model_dir),
@@ -308,12 +311,13 @@ def train_rl(args):
     }
 
     procs = []
+    print('env_kwargs: ', args.env_kwargs)
     for i in range(args.rl_runs):
         # Prepare Command
-        template = 'python -m baselines.run --alg=ppo2 --env={env} --num_env={nenv} --num_timesteps={num_timesteps} --save_interval={save_interval} --custom_reward {custom_reward} --custom_reward_kwargs="{kwargs}" --gamma {gamma} --seed {seed}'
-
+        template = 'python -m baselines.run --alg=ppo2 --save_path={save_path} --env={env}  --num_env={nenv} --num_timesteps={num_timesteps} --save_interval={save_interval} --custom_reward {custom_reward} --custom_reward_kwargs="{kwargs}" --gamma {gamma} --seed {seed}'
         cmd = template.format(
             env=args.env_id,
+            save_path=f'model/mu2/{args.env_id}_irm_{args.irm_coeff}_seed_{args.seed}',
             nenv=1,  # ncpu//ngpu,
             num_timesteps=args.num_timesteps,
             save_interval=args.save_interval,
@@ -346,26 +350,44 @@ def train_rl(args):
 def eval_rl(args):
     np.random.seed(args.seed)
     tf.random.set_random_seed(args.seed)
+    name_temp = str(args.env_kwargs)
 
     from utils import PPO2Agent, gen_traj
 
-    env = gym.make(args.env_id)
+    print('evaluating reward RL trained or Reward')
+
+    env = gym.make(args.env_id, **args.env_kwargs)
     env.seed(args.seed)
 
     def _get_perf(agent, num_eval=20):
         V = []
+        sum_ctrl_cost = []
+        sum_healthy_reward = []
+        sum_forward_reward = []
+        # ctrl_cost = []
         for _ in range(num_eval):
-            _, _, R = gen_traj(env, agent, -1)
+            _, _, R, control_cost, healthy_reward, forw_rew = gen_traj(env, agent, -1)
             V.append(np.sum(R))
-        return V
+            sum_ctrl_cost.append(np.sum(control_cost))
+            sum_healthy_reward.append(np.sum(healthy_reward))
+            sum_forward_reward.append(np.sum(forw_rew))
+            # ctrl_cost.append(control_cost)
+        return V, sum_ctrl_cost, sum_healthy_reward, sum_forward_reward  # , ctrl_cost
 
     with open(os.path.join(args.log_dir, 'rl_results_clip_action.txt'), 'w') as f:
         # Load T-REX learned agent
-        agents_dir = Path(os.path.abspath(os.path.join(args.log_dir, 'rl')))
+        if args.irm_coeff > 0:
+            agents_dir = Path(
+                os.path.abspath(os.path.join(args.log_dir, f'rl_{args.irm_coeff}_{name_temp}_seed_{args.seed}')))
+        else:
+            agents_dir = Path(os.path.abspath(os.path.join(args.log_dir, f'rl_{name_temp}_seed_{args.seed}')))
 
         trained_steps = sorted(list(set([path.name for path in agents_dir.glob('run_*/checkpoints/?????')])))
         for step in trained_steps[::-1]:
             perfs = []
+            total_ctrl_costs = []
+            healthy = []
+            forward_reward = []
             for i in range(args.rl_runs):
                 path = agents_dir / ('run_%d' % i) / 'checkpoints' / step
 
@@ -373,16 +395,22 @@ def eval_rl(args):
                     continue
 
                 agent = PPO2Agent(env, 'mujoco', str(path), stochastic=True)
-                agent_perfs = _get_perf(agent)
+                agent_perfs, cum_ctrl_cost, healthy_reward, sum_forward_reward = _get_perf(agent)
+                wandb.log({'cummulative_reward': np.mean(agent_perfs), 'mean_ctrl_cost': np.mean(cum_ctrl_cost),
+                           'std_ctrl_cost': np.std(cum_ctrl_cost), 'healthy reward': np.mean(healthy_reward),
+                           'forward_reward': np.mean(sum_forward_reward)})
                 print('[%s-%d] %f %f' % (step, i, np.mean(agent_perfs), np.std(agent_perfs)))
                 print('[%s-%d] %f %f' % (step, i, np.mean(agent_perfs), np.std(agent_perfs)), file=f)
-                wandb.log({'agent_perf': agent_perfs})
 
                 perfs += agent_perfs
+                total_ctrl_costs += cum_ctrl_cost
+                healthy += healthy_reward
+                forward_reward += sum_forward_reward
             print('[%s] %f %f %f %f' % (step, np.mean(perfs), np.std(perfs), np.max(perfs), np.min(perfs)))
             print('[%s] %f %f %f %f' % (step, np.mean(perfs), np.std(perfs), np.max(perfs), np.min(perfs)), file=f)
-            wandb.log({'perf': perfs})
-
+            wandb.log({'mean_cum_reward': np.mean(perfs), 'max_perf': np.max(perfs), 'min_perfs': np.min(perfs),
+                       'mean_total_ctrl_cost': np.mean(total_ctrl_costs), 'mean total healthy': np.mean(healthy),
+                       'mean forward reward': np.mean(forward_reward)})
             f.flush()
 
 
@@ -395,8 +423,8 @@ if __name__ == "__main__":
     parser.add_argument('--mode', default='train_reward',
                         choices=['all', 'train_reward', 'eval_reward', 'train_rl', 'eval_rl'])
     parser.add_argument('--ctrl_cost', required=False, help='Select the environment to run', default=0.001, type=float)
-    parser.add_argument('--spec', required=False, help='Intervened environment to run',
-                        default="{'xml_file': 'hopper.xml'}")
+    parser.add_argument('--env_kwargs', required=False, help='Run on intervened environment to run',
+                        default={'xml_file': 'hopper_foot_mu5.xml'})
     # Args for T-REX
     ## Dataset setting
     # parser.add_argument('--noise_injected_trajs', default='')
@@ -426,6 +454,15 @@ if __name__ == "__main__":
     parser.add_argument('--gamma', default=0.99, type=float)
     args = parser.parse_args()
 
+    # if args.env_kwargs == True:
+    #     args.env_kwargs = {'xml_file': 'hopper_foot_mu5.xml'}
+    # else:
+    #     args.env_kwargs = {'xml_file': 'hopper.xml'}
+
+    wandb.init(project="DREX-IRM_FINAL", entity="dgarellick",
+               name=f'Hopper_{str(args.env_kwargs)}_{args.irm_coeff}',
+               settings=wandb.Settings(start_method='fork'))
+
     if args.mode == 'train_reward':
         train_reward(args)
         tf.reset_default_graph()
@@ -433,6 +470,7 @@ if __name__ == "__main__":
     elif args.mode == 'eval_reward':
         eval_reward(args)
     elif args.mode == 'train_rl':
+        print('in training rl: ',args.env_kwargs)
         train_rl(args)
         tf.reset_default_graph()
         eval_rl(args)

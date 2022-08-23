@@ -8,7 +8,7 @@ import numpy as np
 
 from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
 from baselines.common.vec_env.vec_frame_stack import VecFrameStack
-from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
+from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env #, make_env
 from baselines.common.tf_util import get_session
 from baselines import logger
 from importlib import import_module
@@ -114,36 +114,37 @@ def build_env(args):
 
     env_type, env_id = get_env_type(args.env)
 
-    if env_type in {'atari', 'retro'}:
-        if alg == 'deepq':
-            env = make_env(env_id, env_type, seed=seed, wrapper_kwargs={'frame_stack': True})
-        elif alg == 'trpo_mpi':
-            env = make_env(env_id, env_type, seed=seed)
-        else:
-            frame_stack_size = 4
-            env = make_vec_env(env_id, env_type, nenv, seed, gamestate=args.gamestate, reward_scale=args.reward_scale)
-            env = VecFrameStack(env, frame_stack_size)
-    elif env_type == 'robosuite':
-        from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
-        def _make_robosuite_env():
-            from gym.wrappers import FlattenDictWrapper
-            from baselines.bench import Monitor
+    # if env_type in {'atari', 'retro'}:
+    #     if alg == 'deepq':
+    #         env = make_env(env_id, env_type, seed=seed, wrapper_kwargs={'frame_stack': True})
+    #     elif alg == 'trpo_mpi':
+    #         env = make_env(env_id, env_type, seed=seed)
+    #     else:
+    #         frame_stack_size = 4
+    #         env = make_vec_env(env_id, env_type, nenv, seed, env_kwargs=None, gamestate=args.gamestate, reward_scale=args.reward_scale)
+    #         env = VecFrameStack(env, frame_stack_size)
+    # elif env_type == 'robosuite':
+    #     from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
+    #     def _make_robosuite_env():
+    #         from gym.wrappers import FlattenDictWrapper
+    #         from baselines.bench import Monitor
+    #
+    #         env = suite.make(env_id)
+    #         env = FlattenDictWrapper(env, ['robot-state', 'object-state'])
+    #         env = Monitor(env,logger.get_dir(),allow_early_resets=True)
+    #         return env
+    #
+    #     #? env.seed(seed + subrank if seed is not None else None)
+    #     env = DummyVecEnv([_make_robosuite_env])
+    # else:
+    config = tf.ConfigProto(allow_soft_placement=True,
+                           intra_op_parallelism_threads=1,
+                           inter_op_parallelism_threads=1)
+    config.gpu_options.allow_growth = True
+    get_session(config=config)
 
-            env = suite.make(env_id)
-            env = FlattenDictWrapper(env, ['robot-state', 'object-state'])
-            env = Monitor(env,logger.get_dir(),allow_early_resets=True)
-            return env
-
-        #? env.seed(seed + subrank if seed is not None else None)
-        env = DummyVecEnv([_make_robosuite_env])
-    else:
-       config = tf.ConfigProto(allow_soft_placement=True,
-                               intra_op_parallelism_threads=1,
-                               inter_op_parallelism_threads=1)
-       config.gpu_options.allow_growth = True
-       get_session(config=config)
-
-       env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale)
+    # print('env_kwargs in run: ', env_kwargs)
+    env = make_vec_env(env_id, env_type, args.num_env or 1, seed, env_kwargs={'xml_file': 'hopper.xml'}, reward_scale=args.reward_scale)
 
     if args.custom_reward != '':
         from baselines.common.vec_env import VecEnv, VecEnvWrapper
@@ -256,6 +257,7 @@ def main():
 
     if args.save_path is not None and rank == 0:
         save_path = osp.expanduser(args.save_path)
+        print('save_path: ', save_path)
         model.save(save_path)
 
     if args.play:
