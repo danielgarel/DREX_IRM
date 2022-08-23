@@ -1,0 +1,51 @@
+Sender: LSF System <lsfadmin@eu-g3-002>
+Subject: Job 229534280: <python ./run_test.py --env_id Hopper-v3 --model_path ./baselines/model/mu2/Hopper-v3_ERM --record_video --env_type mujoco> in cluster <euler> Exited
+
+Job <python ./run_test.py --env_id Hopper-v3 --model_path ./baselines/model/mu2/Hopper-v3_ERM --record_video --env_type mujoco> was submitted from host <eu-login-45> by user <dgarellick> in cluster <euler> at Mon Aug 22 19:25:48 2022
+Job was executed on host(s) <6*eu-g3-002>, in queue <gpu.4h>, as user <dgarellick> in cluster <euler> at Mon Aug 22 19:26:11 2022
+</cluster/home/dgarellick> was used as the home directory.
+</cluster/home/dgarellick/CoRL2019-DREX/drex-mujoco/learner> was used as the working directory.
+Started at Mon Aug 22 19:26:11 2022
+Terminated at Mon Aug 22 19:26:27 2022
+Results reported at Mon Aug 22 19:26:27 2022
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+python ./run_test.py --env_id Hopper-v3 --model_path ./baselines/model/mu2/Hopper-v3_ERM --record_video --env_type mujoco
+------------------------------------------------------------
+
+Exited with exit code 1.
+
+Resource usage summary:
+
+    CPU time :                                   6.12 sec.
+    Max Memory :                                 654 MB
+    Average Memory :                             381.00 MB
+    Total Requested Memory :                     12000.00 MB
+    Delta Memory :                               11346.00 MB
+    Max Swap :                                   -
+    Max Processes :                              3
+    Max Threads :                                4
+    Run time :                                   41 sec.
+    Turnaround time :                            39 sec.
+
+The output (if any) follows:
+
+WARNING: Logging before flag parsing goes to stderr.
+W0822 19:26:20.853371 47358120604544 deprecation_wrapper.py:119] From ./baselines/baselines/common/mpi_adam_optimizer.py:5: The name tf.train.AdamOptimizer is deprecated. Please use tf.compat.v1.train.AdamOptimizer instead.
+
+Logging to /scratch/229534280.tmpdir/openai-2022-08-22-19-26-23-393825
+/cluster/home/dgarellick/.miniconda3/envs/bubu2/lib/python3.6/site-packages/dask/dataframe/utils.py:13: FutureWarning: pandas.util.testing is deprecated. Use the functions in the public API at pandas.testing instead.
+  import pandas.util.testing as tm
+W0822 19:26:23.863830 47358120604544 deprecation_wrapper.py:119] From ./baselines/baselines/common/misc_util.py:79: The name tf.set_random_seed is deprecated. Please use tf.compat.v1.set_random_seed instead.
+
+in the make_env:  {'xml_file': 'hopper.xml'}
+INFO: Making new env: Hopper-v3 ({'xml_file': 'hopper.xml'})
+Traceback (most recent call last):
+  File "./run_test.py", line 83, in <module>
+    env.load(args.model_path) # Reload running mean & rewards if available
+  File "./baselines/baselines/common/vec_env/vec_normalize.py", line 62, in load
+    s = pickle.load(f)
+_pickle.UnpicklingError: invalid load key, '\xa8'.

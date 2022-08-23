@@ -61,21 +61,16 @@ class PPO2Agent(object):
                 self.model_path = path
                 self.model.load(path)
 
-        # if env_type in ['mujoco','robosuite']:
-        #     with open(path+'.env_stat.pkl', 'rb') as f :
-        #         import pickle
-        #         s = pickle.load(f)
-        #     self.ob_rms = s['ob_rms']
-        #     #self.ret_rms = s['ret_rms']
-        #     self.clipob = 10.
-        #     self.epsilon = 1e-8
-        # else:
-        #     self.ob_rms = None
-########### DG Added Code #########
-        self.ob_rms = None
-        self.clipob = 10.
-        self.epsilon = 1e-8
-###################################
+        if env_type in ['mujoco','robosuite']:
+            with open(path+'.env_stat.pkl', 'rb') as f :
+                import pickle
+                s = pickle.load(f)
+            self.ob_rms = s['ob_rms']
+            #self.ret_rms = s['ret_rms']
+            self.clipob = 10.
+            self.epsilon = 1e-8
+        else:
+            self.ob_rms = None
 
         self.stochastic = stochastic
 
@@ -175,6 +170,7 @@ class Model(object):
 
         self.l2_reg = tf.placeholder(tf.float32,[]) # [0 when x is better 1 when y is better]
         ### DG ###
+
         self.irm_coeff = tf.placeholder(tf.float32,[])
 
         # Graph Ops for Inference
@@ -189,10 +185,12 @@ class Model(object):
 
         logits = tf.stack([self.v_x,self.v_y],axis=1) #[None,2]
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits,labels=self.l)
+        self.loss = tf.reduce_mean(loss,axis=0)
 
         # Regularizer Ops
         weight_decay = net.build_weight_decay()
         self.l2_loss = self.l2_reg * weight_decay
+
         ### DG ###
         labels = tf.stack([tf.cast(self.l, tf.float32),tf.cast(1-self.l, tf.float32)], axis=1)
         grad_penalty = self.irm_penalty(logits, labels)
@@ -201,26 +199,36 @@ class Model(object):
         self.loss = tf.reduce_mean(loss,axis=0) + self.l2_loss + self.irm_loss
         self.loss = tf.cond(tf.greater(self.irm_coeff, 1), true_fn=lambda: tf.math.divide(self.loss, self.irm_coeff), false_fn=lambda: tf.math.divide(self.loss, 1))
 
-
+# <<<<<<< HEAD
         ##DG##
         # self.summary_scalar # add the loss and then add to file and execute as part of execution in training
+# =======
+#         self.irm_loss = self.irm_coeff * self.irm_penalty(self.l, logits)
+#
+#         self.total_loss = self.loss+self.irm_loss+self.l2_loss
+#         if self.irm_coeff > 1.0:
+#             self.total_loss /= self.irm_coeff
+# >>>>>>> master
 
         pred = tf.cast(tf.greater(self.v_y,self.v_x),tf.int32)
         self.acc = tf.reduce_mean(tf.cast(tf.equal(pred,self.l),tf.float32))
 
         self.optim = tf.train.AdamOptimizer(1e-4)
+# <<<<<<< HEAD
         self.update_op = self.optim.minimize(self.loss, var_list=self.parameters(train=True))
+# =======
+#         self.update_op = self.optim.minimize(self.total_loss, var_list=self.parameters(train=True))
+# >>>>>>> master
 
         self.saver = tf.train.Saver(var_list=self.parameters(train=False),max_to_keep=0)
 
-    def irm_penalty(self, logits, y):
+    def irm_penalty(self, y, logits):
         scale = tf.constant(1.)
         with tf.GradientTape() as tape:
             tape.watch(scale)
-            loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits * scale, labels=y)
+            loss = tf.losses.binary_crossentropy(y, logits * scale, from_logits=True)
         grad = tape.gradient(loss, [scale])[0]
         return tf.reduce_sum(grad ** 2)
-
 
     def parameters(self,train=False):
         if train:
@@ -228,7 +236,7 @@ class Model(object):
         else:
             return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,self.net.param_scope.name)
 
-    def train(self,D,iter=10000,l2_reg=0.01,irm_coeff=0.,noise_level=0.1,debug=False,early_term=False):
+    def train(self,D,iter=10000,l2_reg=0.01,irm_coeff=1000, noise_level=0.1,debug=False,early_term=False):
         """
         args:
             D: list of triplets (\sigma^1,\sigma^2,\mu)
@@ -236,7 +244,6 @@ class Model(object):
                     sigma^{1,2}: shape of [steps,in_dims]
                     mu : 0 or 1
             l2_reg
-            irm_reg
             noise_level: input label noise to prevent overfitting
             debug: print training statistics
             early_term:  training will be early-terminate when validation accuracy is larger than 95%
@@ -296,7 +303,7 @@ class Model(object):
             b_x,b_y,x_split,y_split,b_l = _batch(train_idxes,add_noise=True)
             #b_x,b_y,x_split,y_split,b_l = sess.run(batch_op)
 
-            loss,l2_loss,irm_loss,acc,_ = sess.run([self.loss,self.l2_loss,self.irm_loss,self.acc,self.update_op],feed_dict={
+            loss,l2_loss,irm_loss,total_loss,acc,_ = sess.run([self.loss,self.l2_loss,self.irm_loss,self.total_loss,self.acc,self.update_op],feed_dict={
                 self.x:b_x,
                 self.y:b_y,
                 self.x_split:x_split,
@@ -319,16 +326,22 @@ class Model(object):
                         self.y_split:y_split,
                         self.l:b_l
                     })
+# <<<<<<< HEAD
                     tqdm.write(('loss: %f (l2_loss: %f, irm_loss: %f), acc: %f, valid_acc: %f'%(loss,l2_loss,irm_loss,acc,valid_acc)))
+# =======
+#                     tqdm.write(('loss: %f (l2_loss: %f), acc: %f, valid_acc: %f, total_loss: %f'%(loss,l2_loss,acc,valid_acc, total_loss)))
+# >>>>>>> master
 
             if early_term and valid_acc >= 0.95:
-                print('loss: %f (l2_loss: %f, irm_loss: %f), acc: %f, valid_acc: %f'%(loss,l2_loss,irm_loss,acc,valid_acc))
+                print('loss: %f (l2_loss: %f), acc: %f, valid_acc: %f, total_loss: %f'%(loss,l2_loss,acc,valid_acc,total_loss))
                 print('early termination@%08d'%it)
                 break
+
             # ### DG added - before no return ###
             # if irm_coeff>0:
             #     return loss, acc, irm_loss/irm_coeff
             # ###################################
+
 
     def get_reward(self,obs,acs,batch_size=1024):
         sess = tf.get_default_session()
@@ -344,3 +357,4 @@ class Model(object):
             b_r.append(r)
 
         return np.concatenate(b_r,axis=0)
+
