@@ -161,7 +161,6 @@ def build_env(args):
         elif args.custom_reward == 'preference_normalized':
             env = W.VecTFPreferenceRewardNormalized(env,**custom_reward_kwargs)
         elif args.custom_reward == 'preference_normalized_v2':
-            print('entering the baselines with custom reward')
             env = W.VecTFPreferenceRewardNormalizedV2(env,**custom_reward_kwargs)
         elif args.custom_reward == 'preference_normalized_v3':
             env = W.VecTFPreferenceRewardNormalizedV3(env,**custom_reward_kwargs)

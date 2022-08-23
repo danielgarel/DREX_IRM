@@ -1,5 +1,3 @@
-# TODO: I believe that for IRM to be meaningful we should not be training on all three datasets but on the two and testing on the third one
-
 import os
 import argparse
 import pickle
@@ -161,27 +159,18 @@ def bc(args):
 
     with open(str(logdir/'args.txt'),'w') as f:
         f.write( str(args) )
-    import ast
-    spec = ast.literal_eval(args.spec)
-    env = gym.make(args.env_id, ctrl_cost_weight=args.ctrl_cost, **spec)
+
+    env = gym.make(args.env_id)
     env.seed(args.seed)
 
     policy = Policy(env,args.num_layers,args.embed_size)
-    
-    if args.demo_trajs_dir is not None:
-        demo_trajs = [f for f in os.listdir(args.demo_trajs_dir) if os.path.isfile(os.path.join(args.demo_trajs_dir, f))]
-    
-        for env_dataset in demo_trajs:
-            dataset = Dataset(os.path.join(args.demo_trajs_dir, env_dataset))
-            
-    else:
-        dataset = Dataset(args.demo_trajs)
+    dataset = Dataset(args.demo_trajs)
 
-        try:
-            D = dataset.getD()
-            policy.train(D,args.batch_size,args.num_iter,l2_reg=args.l2_reg,debug=True)
-        except KeyboardInterrupt:
-            pass
+    try:
+        D = dataset.getD()
+        policy.train(D,args.batch_size,args.num_iter,l2_reg=args.l2_reg,debug=True)
+    except KeyboardInterrupt:
+        pass
 
     policy.save(os.path.join(logdir,'model.ckpt'))
 
@@ -192,12 +181,8 @@ if __name__ == "__main__":
     parser.add_argument('--seed', default=0, type=int, help='seed for the experiments')
     parser.add_argument('--log_path', required=True, help='log dir')
     parser.add_argument('--env_id', required=True, help='Select the environment to run')
-    parser.add_argument('--ctrl_cost', required=False, help='Select the environment to run', default=0.001, type=float)
-    parser.add_argument('--spec', required=False, help='Intervened environment to run', default="{'xml_file': 'hopper.xml'}")
-    
     # Dataset
-    parser.add_argument('--demo_trajs',required=False, help='suboptimal demo trajectories')
-    parser.add_argument('--demo_trajs_dir',required=False, help='suboptimal demo trajectories directories - load all files')
+    parser.add_argument('--demo_trajs',required=True, help='suboptimal demo trajectories')
     # Network
     parser.add_argument('--num_layers', default=4,type=int)
     parser.add_argument('--embed_size', default=256,type=int)
