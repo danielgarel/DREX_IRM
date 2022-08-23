@@ -2,7 +2,6 @@ import sys
 import os
 import numpy as np
 import tensorflow as tf
-import wandb
 from tqdm import tqdm
 
 import gym
@@ -87,20 +86,14 @@ class PPO2Agent(object):
         return np.clip(a[0],-1.,1.)
 
 def gen_traj(env,agent,min_length):
-    obs, actions, rewards, control_cost, healthy, forward_rew = [env.reset()], [], [], [], [], []
+    obs, actions, rewards = [env.reset()], [], []
     while True:
         action = agent.act(obs[-1], None, None)
         ob, reward, done, _ = env.step(action)
-        ctrl_cost = env.control_cost(action)
-        healthy_reward = env.healthy_reward
-        forward_reward = reward - healthy_reward + ctrl_cost
 
         obs.append(ob)
         actions.append(action)
         rewards.append(reward)
-        control_cost.append(ctrl_cost)
-        healthy.append(healthy_reward)
-        forward_rew.append(forward_reward)
 
         if done:
             if len(obs) < min_length:
@@ -110,7 +103,7 @@ def gen_traj(env,agent,min_length):
                 obs.pop()
                 break
 
-    return np.stack(obs,axis=0), np.array(actions), np.array(rewards), np.array(control_cost), np.array(healthy), np.array(forward_rew)
+    return np.stack(obs,axis=0), np.array(actions), np.array(rewards)
 
 ####################
 
@@ -155,10 +148,6 @@ class RewardNet():
 
 class Model(object):
     def __init__(self,net:RewardNet,batch_size=64):
-        '''
-        Need to defing a self.logging
-        '''
-
         self.B = batch_size
         self.net = net
 
@@ -169,8 +158,6 @@ class Model(object):
         self.l = tf.placeholder(tf.int32,[self.B]) # [0 when x is better 1 when y is better]
 
         self.l2_reg = tf.placeholder(tf.float32,[]) # [0 when x is better 1 when y is better]
-        ### DG ###
-
         self.irm_coeff = tf.placeholder(tf.float32,[])
 
         # Graph Ops for Inference
@@ -190,35 +177,17 @@ class Model(object):
         # Regularizer Ops
         weight_decay = net.build_weight_decay()
         self.l2_loss = self.l2_reg * weight_decay
+        self.irm_loss = self.irm_coeff * self.irm_penalty(self.l, logits)
 
-        ### DG ###
-        labels = tf.stack([tf.cast(self.l, tf.float32),tf.cast(1-self.l, tf.float32)], axis=1)
-        grad_penalty = self.irm_penalty(logits, labels)
-        self.irm_loss = self.irm_coeff * grad_penalty
-
-        self.loss = tf.reduce_mean(loss,axis=0) + self.l2_loss + self.irm_loss
-        self.loss = tf.cond(tf.greater(self.irm_coeff, 1), true_fn=lambda: tf.math.divide(self.loss, self.irm_coeff), false_fn=lambda: tf.math.divide(self.loss, 1))
-
-# <<<<<<< HEAD
-        ##DG##
-        # self.summary_scalar # add the loss and then add to file and execute as part of execution in training
-# =======
-#         self.irm_loss = self.irm_coeff * self.irm_penalty(self.l, logits)
-#
-#         self.total_loss = self.loss+self.irm_loss+self.l2_loss
-#         if self.irm_coeff > 1.0:
-#             self.total_loss /= self.irm_coeff
-# >>>>>>> master
+        self.total_loss = self.loss+self.irm_loss+self.l2_loss
+        if self.irm_coeff > 1.0:
+            self.total_loss /= self.irm_coeff
 
         pred = tf.cast(tf.greater(self.v_y,self.v_x),tf.int32)
         self.acc = tf.reduce_mean(tf.cast(tf.equal(pred,self.l),tf.float32))
 
         self.optim = tf.train.AdamOptimizer(1e-4)
-# <<<<<<< HEAD
-        self.update_op = self.optim.minimize(self.loss, var_list=self.parameters(train=True))
-# =======
-#         self.update_op = self.optim.minimize(self.total_loss, var_list=self.parameters(train=True))
-# >>>>>>> master
+        self.update_op = self.optim.minimize(self.total_loss, var_list=self.parameters(train=True))
 
         self.saver = tf.train.Saver(var_list=self.parameters(train=False),max_to_keep=0)
 
@@ -313,9 +282,6 @@ class Model(object):
                 self.irm_coeff:irm_coeff
             })
 
-            wandb.log({'loss': loss, 'l2_loss': l2_loss,
-                       'acc': acc, f"'irm_loss_'{irm_coeff}": irm_loss})
-
             if debug:
                 if it % 100 == 0 or it < 10:
                     b_x,b_y,x_split,y_split,b_l = _batch(valid_idxes,add_noise=False)
@@ -326,22 +292,12 @@ class Model(object):
                         self.y_split:y_split,
                         self.l:b_l
                     })
-# <<<<<<< HEAD
-                    tqdm.write(('loss: %f (l2_loss: %f, irm_loss: %f), acc: %f, valid_acc: %f'%(loss,l2_loss,irm_loss,acc,valid_acc)))
-# =======
-#                     tqdm.write(('loss: %f (l2_loss: %f), acc: %f, valid_acc: %f, total_loss: %f'%(loss,l2_loss,acc,valid_acc, total_loss)))
-# >>>>>>> master
+                    tqdm.write(('loss: %f (l2_loss: %f), acc: %f, valid_acc: %f, total_loss: %f'%(loss,l2_loss,acc,valid_acc, total_loss)))
 
             if early_term and valid_acc >= 0.95:
                 print('loss: %f (l2_loss: %f), acc: %f, valid_acc: %f, total_loss: %f'%(loss,l2_loss,acc,valid_acc,total_loss))
                 print('early termination@%08d'%it)
                 break
-
-            # ### DG added - before no return ###
-            # if irm_coeff>0:
-            #     return loss, acc, irm_loss/irm_coeff
-            # ###################################
-
 
     def get_reward(self,obs,acs,batch_size=1024):
         sess = tf.get_default_session()

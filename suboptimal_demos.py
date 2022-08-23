@@ -3,7 +3,7 @@ import gym
 import numpy as np
 import torch.nn as nn
 import os
-import tensorflow as tf
+# import tensorflow as tf
 import datetime
 import pickle
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -177,6 +177,7 @@ for spec, costs in zip(env_kwargs, [[0.01, 0.008], [0.1, 0.17]]):
 
         print(spec, cost)
         envs = [make_env(i, cost) for i in range(1)]
+        print('the envs are: ', envs)
 
         env = DummyVecEnv(envs)
 
